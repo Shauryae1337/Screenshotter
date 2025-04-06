@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Local Screenshot Tool</title>
+  <style>
+    /* --- Existing styles (unchanged) --- */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      line-height: 1.6;
+      padding: 20px;
+      background-color: #f4f7f6;
+      color: #333;
+    }
+    .container {
+      max-width: 1000px;
+      margin: auto;
+      background: #fff;
+      padding: 25px 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+      margin-bottom: 25px;
+    }
+    textarea {
+      width: 98%;
+      min-height: 150px;
+      padding: 12px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      resize: vertical;
+    }
+    button {
+      display: inline-block;
+      padding: 10px 16px;
+      margin: 0 5px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.3s ease;
+    }
+    button:hover:not(:disabled) {
+      background-color: #2980b9;
+    }
+    button:disabled {
+      background-color: #bdc3c7;
+      cursor: not-allowed;
+    }
+    #results {
+      margin-top: 30px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 25px;
+    }
+    .screenshot-item {
+      border: 1px solid #e0e0e0;
+      padding: 15px;
+      border-radius: 6px;
+      background-color: #fdfdfd;
+      text-align: center;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    .screenshot-item .url-link {
+      font-size: 0.9em;
+      color: #555;
+      margin-bottom: 10px;
+      word-wrap: break-word;
+      display: block;
+      text-decoration: none;
+    }
+    .screenshot-item .url-link:hover {
+      color: #3498db;
+      text-decoration: underline;
+    }
+    .screenshot-item img {
+      max-width: 100%;
+      height: auto;
+      border: 1px solid #eee;
+      margin-top: 10px;
+      margin-bottom: 5px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      cursor: zoom-in;
+      transition: transform 0.2s ease-in-out;
+    }
+    .screenshot-item img:hover {
+      transform: scale(1.03);
+    }
+    .status-indicator {
+      padding: 10px 0 5px;
+      font-weight: bold;
+      min-height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: auto;
+    }
+    .status-success { display: none; }
+    .screenshot-item:not(:has(img)) .status-success { display: flex; }
+    .status-error { color: #e74c3c; font-size: 0.85em; word-wrap: break-word; }
+    .status-loading { color: #7f8c8d; font-style: italic; }
+    .general-error { color: #e74c3c; font-weight: bold; text-align: center; margin-top: 20px; }
+
+    /* Pagination controls */
+    #paginationControls {
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    /* Modal styles (unchanged) */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      cursor: zoom-out;
+    }
+    .modal-overlay.visible {
+      display: flex;
+      opacity: 1;
+    }
+    .modal-content {
+      position: relative;
+      background: #fff;
+      padding: 20px;
+      border-radius: 5px;
+      max-width: 90%;
+      max-height: 90%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+    }
+    .modal-content img {
+      display: block;
+      max-width: 100%;
+      max-height: calc(90vh - 60px);
+    }
+    .modal-close-btn {
+      position: absolute;
+      top: -10px; right: -10px;
+      background: #333;
+      color: #fff;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      font-size: 20px;
+      line-height: 28px;
+      text-align: center;
+      cursor: pointer;
+      z-index: 1002;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+    .modal-close-btn:hover {
+      background: #e74c3c;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Local Website Screenshot Tool</h1>
+    <p>Enter URLs (one per line). Click generated images to zoom. Screenshots saved in <code>static/screenshots</code>.</p>
+
+    <textarea id="urlList" placeholder="example.com&#10;https://google.com&#10;https://github.com"></textarea>
+    <button id="generateBtn">Generate Screenshots</button>
+
+    <div id="results"></div>
+
+    <!-- Pagination controls -->
+    <div id="paginationControls">
+      <button id="prevPageBtn" disabled>← Prev</button>
+      <span id="pageIndicator">Page 1</span>
+      <button id="nextPageBtn" disabled>Next →</button>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="imageModalOverlay" class="modal-overlay">
+    <div id="imageModalContent" class="modal-content">
+      <img id="modalImage" src="" alt="Zoomed Screenshot">
+      <span id="modalCloseBtn" class="modal-close-btn">&times;</span>
+    </div>
+  </div>
+
+  <script>
+    const urlListTextArea = document.getElementById('urlList');
+    const generateBtn = document.getElementById('generateBtn');
+    const resultsDiv = document.getElementById('results');
+    const modalOverlay = document.getElementById('imageModalOverlay');
+    const modalImage = document.getElementById('modalImage');
+    const modalCloseBtn = document.getElementById('modalCloseBtn');
+    const prevBtn = document.getElementById('prevPageBtn');
+    const nextBtn = document.getElementById('nextPageBtn');
+    const pageIndicator = document.getElementById('pageIndicator');
+
+    let paginatedResults = [];
+    let currentPage = 1;
+    const itemsPerPage = 10;
+
+    generateBtn.addEventListener('click', handleGenerateClick);
+
+    async function handleGenerateClick() {
+      const urls = urlListTextArea.value
+        .split('\n')
+        .map(url => url.trim())
+        .filter(url => url.length > 0);
+
+      resultsDiv.innerHTML = '';
+      paginatedResults = [];
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'Generating...';
+
+      if (urls.length === 0) {
+        resultsDiv.innerHTML = '<p class="general-error">Please enter at least one URL.</p>';
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Generate Screenshots';
+        return;
+      }
+
+      urls.forEach((url, index) => {
+        const placeholder = document.createElement('div');
+        placeholder.classList.add('screenshot-item');
+        placeholder.innerHTML = `
+          <a href="${url.startsWith('http') ? url : 'https://' + url}" target="_blank" rel="noopener noreferrer" class="url-link">${url}</a>
+          <div class="status-indicator status-loading">Processing...</div>
+        `;
+        resultsDiv.appendChild(placeholder);
+      });
+
+      try {
+        const response = await fetch('/screenshot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls })
+        });
+
+        if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
+        const resultsData = await response.json();
+        displayResults(resultsData, urls);
+      } catch (error) {
+        console.error('Fetch Error:', error);
+        resultsDiv.innerHTML = `<p class="general-error">Failed to contact server: ${error.message}</p>`;
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Generate Screenshots';
+      }
+    }
+
+    function displayResults(resultsData, originalUrls) {
+      resultsDiv.innerHTML = '';
+      paginatedResults = [];
+
+      const urlMap = new Map(resultsData.map(item => [item.url, item]));
+
+      originalUrls.forEach(url => {
+        const result = urlMap.get(url);
+        const displayUrl = url.startsWith('http') ? url : 'https://' + url;
+        const div = document.createElement('div');
+        div.classList.add('screenshot-item');
+
+        if (result && result.status === 'success') {
+          div.innerHTML = `
+            <a href="${displayUrl}" target="_blank" rel="noopener noreferrer" class="url-link">${url}</a>
+            <img src="${result.image_path}?t=${Date.now()}" alt="Screenshot of ${url}" loading="lazy"
+              onerror="this.parentElement.querySelector('.status-indicator').classList.add('status-error'); this.parentElement.querySelector('.status-indicator').textContent='Error loading image.'; this.style.display='none';">
+            <div class="status-indicator status-success"></div>
+          `;
+        } else {
+          const errorMessage = result ? result.message : 'Processing failed or timed out.';
+          div.innerHTML = `
+            <a href="${displayUrl}" target="_blank" rel="noopener noreferrer" class="url-link">${url}</a>
+            <div class="status-indicator status-error">Error: ${escapeHtml(errorMessage)}</div>
+          `;
+        }
+
+        paginatedResults.push(div);
+      });
+
+      currentPage = 1;
+      updatePagination();
+    }
+
+    function updatePagination() {
+      const start = (currentPage - 1) * itemsPerPage;
+      const end = start + itemsPerPage;
+      resultsDiv.innerHTML = '';
+      paginatedResults.slice(start, end).forEach(div => resultsDiv.appendChild(div));
+
+      const totalPages = Math.ceil(paginatedResults.length / itemsPerPage);
+      pageIndicator.textContent = `Page ${currentPage} of ${totalPages}`;
+      prevBtn.disabled = currentPage === 1;
+      nextBtn.disabled = currentPage === totalPages;
+    }
+
+    prevBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        updatePagination();
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      const totalPages = Math.ceil(paginatedResults.length / itemsPerPage);
+      if (currentPage < totalPages) {
+        currentPage++;
+        updatePagination();
+      }
+    });
+
+    function escapeHtml(unsafe) {
+      return unsafe?.replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+    }
+
+    resultsDiv.addEventListener('click', function(event) {
+      if (event.target.tagName === 'IMG' && event.target.closest('.screenshot-item')) {
+        modalImage.src = event.target.src;
+        modalOverlay.classList.add('visible');
+      }
+    });
+
+    function closeModal() {
+      modalOverlay.classList.remove('visible');
+    }
+
+    modalCloseBtn.addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) closeModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  </script>
+</body>
+</html>
